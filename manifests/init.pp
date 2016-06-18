@@ -6,10 +6,10 @@ class eyaml (
   $package_name        = 'hiera-eyaml',
   $package_provider    = 'gem',
   $package_ensure      = 'present',
-  $keys_dir            = "${::settings::confdir}/keys",
+  $keys_dir            = '/etc/puppet/keys',
   $keys_dir_ensure     = 'directory',
-  $keys_dir_owner      = $::settings::user,
-  $keys_dir_group      = $::settings::group,
+  $keys_dir_owner      = root,
+  $keys_dir_group      = root,
   $keys_dir_mode       = '0500',
   $public_key_path     = '/etc/puppet/keys/public_key.pkcs7.pem',
   $private_key_path    = '/etc/puppet/keys/private_key.pkcs7.pem',
@@ -21,7 +21,7 @@ class eyaml (
   $config_dir_group    = 'root',
   $config_dir_mode     = '0755',
   $config_ensure       = 'file',
-  $config_path         = '/etc/eyaml/config.yaml',
+  $config_path         = "${config_dir}/config.yaml",
   $config_owner        = 'root',
   $config_group        = 'root',
   $config_mode         = '0644',
@@ -31,6 +31,7 @@ class eyaml (
   },
   $createkeys_path     = '/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin',
   $manage_eyaml_config = true,
+  $manage_keys         = undef,
 ) {
 
   validate_string($package_name)
@@ -69,6 +70,13 @@ class eyaml (
   }
   validate_bool($manage_eyaml_config_bool)
 
+  if is_string($manage_keys) == true {
+    $manage_keys_bool = str2bool($manage_keys)
+  } else {
+    $manage_keys_bool = $manage_keys
+  }
+  validate_bool($manage_keys_bool)
+
   package { 'eyaml':
     ensure   => $package_ensure,
     name     => $package_name,
@@ -105,28 +113,29 @@ class eyaml (
     require => Package['eyaml'],
   }
 
-  exec { 'eyaml_createkeys':
-    path    => $createkeys_path,
-    command => "eyaml createkeys --pkcs7-private-key=${private_key_path} --pkcs7-public-key=${public_key_path}",
-    creates => $private_key_path,
-    require => File['eyaml_keys_dir'],
+  if $manage_keys_bool == true {
+    exec { 'eyaml_createkeys':
+      path    => $createkeys_path,
+      command => "eyaml createkeys --pkcs7-private-key=${private_key_path} --pkcs7-public-key=${public_key_path}",
+      creates => $private_key_path,
+      require => File['eyaml_keys_dir'],
+      before  => File['eyaml_privatekey'],
+    }
   }
 
   file { 'eyaml_publickey':
-    ensure  => file,
-    path    => $public_key_path,
-    owner   => $keys_dir_owner,
-    group   => $keys_dir_group,
-    mode    => $public_key_mode,
-    require => Exec['eyaml_createkeys'],
+    ensure => file,
+    path   => $public_key_path,
+    owner  => $keys_dir_owner,
+    group  => $keys_dir_group,
+    mode   => $public_key_mode,
   }
 
   file { 'eyaml_privatekey':
-    ensure  => file,
-    path    => $private_key_path,
-    owner   => $keys_dir_owner,
-    group   => $keys_dir_group,
-    mode    => $private_key_mode,
-    require => Exec['eyaml_createkeys'],
+    ensure => file,
+    path   => $private_key_path,
+    owner  => $keys_dir_owner,
+    group  => $keys_dir_group,
+    mode   => $private_key_mode,
   }
 }
